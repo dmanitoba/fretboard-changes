@@ -38,7 +38,7 @@ h2{font-family:var(--disp);font-weight:500;font-size:12px;letter-spacing:.14em;t
 .keybar{display:flex;gap:9px;flex-wrap:wrap}
 
 .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--r);padding:14px}
-.cols{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.cols{display:grid;grid-template-columns:minmax(0,1.78fr) minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
 
 .fld{display:flex;flex-direction:column;gap:3px}
 .fld>span{font-family:var(--disp);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
@@ -110,10 +110,11 @@ button:hover{background:#242935;border-color:#454c5c}
 .palette{margin-top:12px;display:flex;flex-direction:column;gap:9px}
 .palrow{display:flex;gap:9px;align-items:flex-start;flex-wrap:wrap}
 .palrow>.eyebrow{flex:0 0 72px;padding-top:7px}
-.palrow.dia{flex-direction:column;align-items:stretch;gap:7px}
-.diahead{display:flex;align-items:center;gap:12px}
-.diahead>.eyebrow{flex:0 0 auto;padding-top:0}
+.palrow.dia{flex-wrap:nowrap;align-items:center;gap:10px}
+.palrow.dia>.eyebrow{flex:0 0 auto;padding-top:0;white-space:nowrap}
 .palrow.dia .chips{flex:1 1 auto}
+.palrow.dia .seg{flex:0 0 auto;margin-left:auto}
+.palrow.dia .seg button{padding:5px 8px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 220px}
 .chips button{font-family:var(--disp);font-size:14px;letter-spacing:.02em;padding:4px 8px;min-height:30px;background:#1c202a;white-space:nowrap}
 .chips button small{font-family:var(--mono);font-size:8.5px;color:var(--faint);margin-left:4px;letter-spacing:.02em}
@@ -276,14 +277,12 @@ kbd{font-family:var(--mono);font-size:10.5px;background:var(--panel3);border:1px
 
       <div class="palette">
         <div class="palrow dia">
-          <div class="diahead">
-            <span class="eyebrow" id="diaLabel">In key</span>
-            <div class="seg" id="palType" role="group" aria-label="Chord size">
-              <button data-v="tri" aria-pressed="false">Triads</button>
-              <button data-v="sev" aria-pressed="true">7ths</button>
-            </div>
-          </div>
+          <span class="eyebrow" id="diaLabel">In key</span>
           <div class="chips" id="diatonic"></div>
+          <div class="seg" id="palType" role="group" aria-label="Chord size">
+            <button data-v="tri" aria-pressed="false">Triads</button>
+            <button data-v="sev" aria-pressed="true">7ths</button>
+          </div>
         </div>
         <div class="palrow">
           <span class="eyebrow">Borrowed</span>

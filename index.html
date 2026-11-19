@@ -217,6 +217,7 @@ kbd{font-family:var(--mono);font-size:10.5px;background:var(--panel3);border:1px
           <button data-v="nps" aria-pressed="false">3-per-string</button>
           <button data-v="box" aria-pressed="false">Boxes</button>
           <button data-v="arp" aria-pressed="false">R-3-5</button>
+          <button data-v="path" aria-pressed="false">Triad path</button>
         </div>
       </div>
       <div class="poswrap" id="nbrFld">
@@ -638,7 +639,8 @@ var SYSNOTE={
   caged:'The five standard positions, each named for the chord shape that anchors it, showing every note of the key inside the position.',
   nps:'Three notes on every string - the stretch fingerings for legato and fast lines. Seven shapes per octave, each starting on a different degree of the scale.',
   box:'The same five positions as CAGED, stripped back to the pentatonic skeleton. Dimmed notes inside the bracket are the rest of the scale, sitting in the gaps the box leaves.',
-  arp:'Every root, 3rd and 5th of the current chord, on every string, right up the neck. Other chord tones (7ths, 9ths) sit smaller behind them. Turn on Outline triad shapes to see how they group.'
+  arp:'Every root, 3rd and 5th of the current chord, on every string, right up the neck. Other chord tones (7ths, 9ths) sit smaller behind them. Turn on Outline triad shapes to see how they group.',
+  path:'One triad per chord, routed up and back down the neck so each shape is a short move from the last. It follows the chord you are on - tick Below and Above to see where you came from and where you are going. The arrows roll a new route.'
 };
 
 /* ---------------- helpers ---------------- */
@@ -716,6 +718,72 @@ function cagedLetters(){
   for(k=-1;k<=2;k++) defs.forEach(function(d){ out.push({l:d[0],lo:g+d[1]+12*k}); });
   return out;
 }
+/* Triad path: one triad per chord, each chosen near a travelling target fret
+   and close to where the last one left your hand. Re-rolled for a new route. */
+var PATH={sig:null,steps:[]};
+function triadQ(c){
+  var iv=CH[c.q].iv;
+  function hs(x){ return iv.indexOf(x)>=0; }
+  if(hs(3)&&hs(6)) return 'dim';
+  if(hs(4)&&hs(8)) return 'aug';
+  if(hs(3)) return 'm';
+  if(hs(4)) return 'maj';
+  if(hs(5)) return 'sus4';
+  if(hs(2)) return 'sus2';
+  return 'maj';
+}
+function pathSignature(){
+  return S.tuningId+'|'+S.strings.join('')+'|'+S.prog.map(function(c){ return c.r+':'+c.q; }).join(',');
+}
+function pathCandidates(c){
+  var q=triadQ(c), out=[];
+  STRINGSETS.forEach(function(ss){
+    if(!S.strings[ss[0]]||!S.strings[ss[1]]||!S.strings[ss[2]]) return;
+    out=out.concat(triadVoicings(pc(c.r),q,ss));
+  });
+  return out;
+}
+function pickStep(c,target,prev){
+  var cands=pathCandidates(c);
+  if(!cands.length) return null;
+  var scored=cands.map(function(v){
+    var mid=(v.lo+v.hi)/2, sc=Math.abs(mid-target);
+    if(prev){
+      sc+=Math.abs(mid-(prev.lo+prev.hi)/2)*0.55;
+      if(v.cells[0][0]!==prev.cells[0][0]) sc+=1.1;
+    }
+    return {v:v,sc:sc+Math.random()*1.7};
+  });
+  scored.sort(function(a,b){ return a.sc-b.sc; });
+  var top=scored.slice(0,3);
+  return top[Math.floor(Math.random()*top.length)].v;
+}
+function buildPath(force){
+  var sig=pathSignature();
+  if(!force&&PATH.sig===sig&&PATH.steps.length) return PATH.steps;
+  var steps=[], prev=null, nn=S.prog.length, i, t, f, target, v, cells,
+      loA=1+Math.floor(Math.random()*4), hiA=12+Math.floor(Math.random()*5),
+      shapes=(nn>=6)?['arc','rise','fall','arc']:['rise','fall','rise'],
+      shape=shapes[Math.floor(Math.random()*shapes.length)];
+  for(i=0;i<nn;i++){
+    t=(nn<2)?0:(i/(nn-1));
+    f=(shape==='arc')?(t<=0.5?t*2:(1-t)*2):(shape==='rise'?t:1-t);
+    target=loA+(hiA-loA)*f+(Math.random()*2-1)*1.4;
+    v=pickStep(S.prog[i],target,prev);
+    if(!v) continue;
+    prev=v;
+    cells={};
+    v.cells.forEach(function(a){ cells[a[0]+':'+a[1]]=1; });
+    steps.push({
+      name:'Step '+(steps.length+1)+' - '+chName(S.prog[i]),
+      sub:'frets '+v.lo+'-'+v.hi+' - '+INVNAME[v.inv]+' on '+[v.cells[2][0],v.cells[1][0],v.cells[0][0]].map(stringLabel).join(' '),
+      frets:[v.lo,v.hi],cells:cells,tri:v.cells,chord:i
+    });
+  }
+  if(!steps.length) steps=[{name:'Triad path',sub:'no triad fits on the strings left switched on',frets:[0,FRETS],cells:null,chord:0}];
+  PATH.sig=sig; PATH.steps=steps;
+  return steps;
+}
 function positions(){
   var set=scaleSet(), t=tun(), out=[], f, sh;
   if(S.sys==='window'){
@@ -726,6 +794,7 @@ function positions(){
   if(S.sys==='arp'){
     return [{name:'R-3-5',sub:'chord tones across the whole neck',frets:[0,FRETS],cells:null,arp:true}];
   }
+  if(S.sys==='path') return buildPath(false);
   if(S.sys==='caged'||S.sys==='box'){
     var boxes=pentBoxes(), letters=cagedLetters();
     boxes.forEach(function(b){
@@ -754,7 +823,11 @@ function inMask(p,s,f){
   return f>=p.frets[0]&&f<=p.frets[1];
 }
 function activeMasks(){
-  var all=positions();
+  var all=positions(), z;
+  if(S.sys==='path'){
+    S.pos=0;
+    for(z=0;z<all.length;z++) if(all[z].chord===S.cur){ S.pos=z; break; }
+  }
   if(S.pos>=all.length) S.pos=all.length-1;
   if(S.pos<0) S.pos=0;
   var a=all[S.pos], n=[];
@@ -903,13 +976,17 @@ function renderBoard(){
     o.push('<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" opacity="'+Math.min(0.75,op*4.5).toFixed(2)+'"/>');
   }
   if(drill) hull(drill.cells,'var(--accent)',0.16);
-  else if(S.triads&&curC&&S.hl!=='all') triadShapes(curC,shown,lo,hi).forEach(function(tri){ hull(tri,curCol,0.13); });
+  else {
+    nbrs.forEach(function(pp){ if(pp.tri) hull(pp.tri,chordColor(S.prog[pp.chord]),0.08); });
+    if(act.tri) hull(act.tri,chordColor(S.prog[act.chord])||curCol,0.18);
+    if(S.triads&&curC&&S.hl!=='all') triadShapes(curC,shown,lo,hi).forEach(function(tri){ hull(tri,curCol,0.13); });
+  }
 
   var dots=[];
   for(s2=0;s2<6;s2++){
     for(i=0;i<g.n;i++){
       f=g.lo+i;
-      var p=pc(t[s2]+f), deg=pc(p-S.keyRoot), inSc=!!set[p], cols=[], ghost=false, tier;
+      var p=pc(t[s2]+f), deg=pc(p-S.keyRoot), inSc=!!set[p], cols=[], ghost=false, tier, ivr=null;
       if(drill){
         if(dcell[s2+':'+f]){ tier=3; cols=['var(--accent)']; }
         else { tier=1; if(!inSc) continue; }
@@ -927,14 +1004,18 @@ function renderBoard(){
         else if(curSet[p]) cols.push(curCol);
         ghost=(S.hl==='ghost'&&nextSet[p]&&!curSet[p]);
         tier=0;
-        if(inMask(act,s2,f)) tier=3;
-        if(!tier){ for(var k=0;k<nbrs.length;k++) if(inMask(nbrs[k],s2,f)){ tier=2; break; } }
+        if(inMask(act,s2,f)){ tier=3; if(act.chord!==undefined&&S.prog[act.chord]) ivr=S.prog[act.chord].r; }
+        if(!tier){ for(var k=0;k<nbrs.length;k++) if(inMask(nbrs[k],s2,f)){
+          tier=2;
+          if(nbrs[k].chord!==undefined&&S.prog[nbrs[k].chord]) ivr=S.prog[nbrs[k].chord].r;
+          break;
+        } }
         if(!tier&&act.cells&&f>=act.frets[0]&&f<=act.frets[1]) tier=1.5;
         if(!tier) tier=1;
         if(!inSc&&!cols.length&&!ghost) continue;
       }
       if(tier===1&&!S.whole) continue;
-      dots.push({s:s2,f:f,p:p,deg:deg,inSc:inSc,cols:cols,ghost:ghost,tier:tier,i:i});
+      dots.push({s:s2,f:f,p:p,deg:deg,inSc:inSc,cols:cols,ghost:ghost,tier:tier,i:i,ivr:ivr});
     }
   }
   dots.sort(function(x1,x2){ return x1.tier-x2.tier; });
@@ -943,7 +1024,7 @@ function renderBoard(){
     var cx=cxOf(d.f), cy=rowY(d.s), filled=d.cols.length>0, sop=S.strings[d.s]?1:0.13;
     var isRoot=drill?(pc(d.p-ivRoot)===0):((S.hl!=='all')&&curC&&d.p===pc(curC.r)&&filled);
     var outKey=filled&&!d.inSc&&!drill;
-    var giv=pc(d.p-ivRoot);
+    var giv=pc(d.p-(d.ivr!==null&&d.ivr!==undefined?d.ivr:ivRoot));
     var isGuide=S.guide&&filled&&!drill&&S.hl!=='all'&&(giv===3||giv===4||giv===10||giv===11);
 
     if(d.tier===1){
@@ -1978,8 +2059,14 @@ function wire(){
   seg('highlight','hl',function(){ renderBoard(); renderLegend(); renderStatus(); });
   seg('palType','palType',renderPalette);
 
-  $('posPrev').addEventListener('click',function(){ S.pos=Math.max(0,S.pos-1); renderBoard(); });
-  $('posNext').addEventListener('click',function(){ S.pos=S.pos+1; renderBoard(); });
+  $('posPrev').addEventListener('click',function(){
+    if(S.sys==='path'){ buildPath(true); renderBoard(); return; }
+    S.pos=Math.max(0,S.pos-1); renderBoard();
+  });
+  $('posNext').addEventListener('click',function(){
+    if(S.sys==='path'){ buildPath(true); renderBoard(); return; }
+    S.pos=S.pos+1; renderBoard();
+  });
   $('view').addEventListener('change',function(){ S.view=this.value; renderBoard(); });
   $('feel').addEventListener('change',function(){ S.feel=this.value; setWet(); });
   $('inst').addEventListener('change',function(){ S.inst=this.value; setTone(); });

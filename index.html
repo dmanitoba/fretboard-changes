@@ -640,7 +640,7 @@ var SYSNOTE={
   nps:'Three notes on every string - the stretch fingerings for legato and fast lines. Seven shapes per octave, each starting on a different degree of the scale.',
   box:'The same five positions as CAGED, stripped back to the pentatonic skeleton. Dimmed notes inside the bracket are the rest of the scale, sitting in the gaps the box leaves.',
   arp:'Every root, 3rd and 5th of the current chord, on every string, right up the neck. Other chord tones (7ths, 9ths) sit smaller behind them. Turn on Outline triad shapes to see how they group.',
-  path:'One triad per chord, on a slow route that drifts up and back down the neck over several laps of the progression - never more than a couple of frets per chord. Tick Below and Above to see the shape before and after. The arrows jump between laps; click Triad path again for a brand new route.'
+  path:'One triad per chord, on a slow route that works up and back down the whole neck over several laps of the progression. Each shape is picked to connect to the last - usually a fret or two of movement, sometimes a position shift. Tick Below and Above to see the shape before and after. The arrows jump between laps; click Triad path again for a brand new route.'
 };
 
 /* ---------------- helpers ---------------- */
@@ -757,16 +757,20 @@ function vlCost(v,prev){
   for(i=0;i<3;i++) d+=Math.abs(a[i]-b[i])*0.6;
   return d+2.5;
 }
-function pickStep(c,target,prev,maxJump){
-  var cands=pathCandidates(c), pool=cands, pm;
+/* The travelling target decides WHERE on the neck - as a window, not a gentle
+   pull, so the route actually migrates - and voice leading then decides WHICH
+   shape to take once you are there. */
+function pickStep(c,target,prev){
+  var cands=pathCandidates(c), pool=[], win=3;
   if(!cands.length) return null;
-  if(prev){
-    pm=(prev.lo+prev.hi)/2;
-    pool=cands.filter(function(v){ return Math.abs((v.lo+v.hi)/2-pm)<=maxJump; });
-    if(!pool.length) pool=cands;
+  while(win<=16){
+    pool=cands.filter(function(v){ return Math.abs((v.lo+v.hi)/2-target)<=win; });
+    if(pool.length) break;
+    win+=2;
   }
+  if(!pool.length) pool=cands;
   var scored=pool.map(function(v){
-    var mid=(v.lo+v.hi)/2, sc=Math.abs(mid-target)*0.9;
+    var mid=(v.lo+v.hi)/2, sc=Math.abs(mid-target)*0.35;
     if(prev) sc+=vlCost(v,prev);
     return {v:v,sc:sc+Math.random()*0.9};
   });
@@ -787,9 +791,9 @@ function buildPath(force){
   var nn=Math.max(1,S.prog.length),
       cycles=Math.max(1,Math.min(6,Math.round(12/nn))),
       total=nn*cycles,
-      maxStep=2.6,
-      amp=Math.min(5.5,maxStep*total/(2*Math.PI)),
-      centre=5+Math.random()*7,
+      maxStep=3,
+      amp=Math.min(6.5,maxStep*total/(2*Math.PI)),
+      centre=6+Math.random()*5,
       phase=Math.random()*Math.PI*2,
       dir=(Math.random()<0.5)?1:-1,
       steps=[], prev=null, i, target, v, cells, c, lap;
@@ -798,7 +802,7 @@ function buildPath(force){
     lap=Math.floor(i/nn);
     target=centre+dir*amp*Math.sin(2*Math.PI*i/total+phase);
     target=Math.max(0,Math.min(FRETS-2,target));
-    v=c?pickStep(c,target,prev,5):null;
+    v=c?pickStep(c,target,prev):null;
     if(!v){
       steps.push({name:(c?chName(c):'-')+(cycles>1?' - lap '+(lap+1)+'/'+cycles:''),
         sub:'no triad fits on the strings left switched on',

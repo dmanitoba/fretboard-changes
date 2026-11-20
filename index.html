@@ -824,7 +824,13 @@ function vlCost(v,prev){
 /* The travelling target decides WHERE on the neck - as a window, not a gentle
    pull, so the route actually migrates - and voice leading then decides WHICH
    shape to take once you are there. */
-function pickStep(c,target,prev){
+function sameShape(a,b){
+  if(!a||!b) return false;
+  for(var i=0;i<a.cells.length;i++)
+    if(a.cells[i][0]!==b.cells[i][0]||a.cells[i][1]!==b.cells[i][1]) return false;
+  return true;
+}
+function pickStep(c,target,prev,hold){
   var cands=pathCandidates(c), pool=[], win=3;
   if(!cands.length) return null;
   while(win<=16){
@@ -835,7 +841,12 @@ function pickStep(c,target,prev){
   if(!pool.length) pool=cands;
   var scored=pool.map(function(v){
     var mid=(v.lo+v.hi)/2, sc=Math.abs(mid-target)*0.35;
-    if(prev) sc+=vlCost(v,prev);
+    if(prev){
+      sc+=vlCost(v,prev);
+      /* sitting on the identical shape is free in voice-leading terms, which
+         freezes a one-chord vamp. Make holding cost more the longer it lasts. */
+      if(sameShape(v,prev)) sc+=1.2+(hold||0)*1.8;
+    }
     return {v:v,sc:sc+Math.random()*0.9};
   });
   scored.sort(function(a,b){ return a.sc-b.sc; });
@@ -853,20 +864,20 @@ function buildPath(force){
   var sig=pathSignature();
   if(!force&&PATH.sig===sig&&PATH.steps.length) return PATH.steps;
   var nn=Math.max(1,S.prog.length),
-      cycles=Math.max(1,Math.min(6,Math.round(12/nn))),
+      cycles=Math.max(1,Math.min(12,Math.round(16/nn))),
       total=nn*cycles,
       maxStep=3,
       amp=Math.min(6.5,maxStep*total/(2*Math.PI)),
       centre=6+Math.random()*5,
       phase=Math.random()*Math.PI*2,
       dir=(Math.random()<0.5)?1:-1,
-      steps=[], prev=null, i, target, v, cells, c, lap;
+      steps=[], prev=null, hold=0, i, target, v, cells, c, lap;
   for(i=0;i<total;i++){
     c=S.prog[i%nn];
     lap=Math.floor(i/nn);
     target=centre+dir*amp*Math.sin(2*Math.PI*i/total+phase);
     target=Math.max(0,Math.min(FRETS-2,target));
-    v=c?pickStep(c,target,prev):null;
+    v=c?pickStep(c,target,prev,hold):null;
     if(!v){
       steps.push({name:(c?chName(c):'-')+(cycles>1?' - lap '+(lap+1)+'/'+cycles:''),
         sub:'no triad fits on the strings left switched on',
@@ -874,6 +885,7 @@ function buildPath(force){
         cells:null,chord:i%nn,lap:lap});
       continue;
     }
+    hold=sameShape(v,prev)?hold+1:0;
     prev=v;
     cells={};
     v.cells.forEach(function(a){ cells[a[0]+':'+a[1]]=1; });
